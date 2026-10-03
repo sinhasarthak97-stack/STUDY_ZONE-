@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Study Zone
@@ -17,19 +17,31 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
+
+      - name: Create package.json if missing
+        run: |
+          if [ ! -f package.json ]; then
+            cat > package.json <<'EOF'
+            {
+              "name": "study-zone",
+              "version": "1.0.0",
+              "private": true
+            }
+            EOF
+          fi
 
       - name: Install Capacitor
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core@8 @capacitor/cli@8 @capacitor/android@8
 
-      - name: Create Capacitor configuration
+      - name: Create Capacitor config
         run: |
           cat > capacitor.config.ts <<'EOF'
           import type { CapacitorConfig } from '@capacitor/cli';
@@ -37,33 +49,37 @@ jobs:
           const config: CapacitorConfig = {
             appId: 'com.studyzone.app',
             appName: 'Study Zone',
-            webDir: '.',
-            bundledWebRuntime: false
+            webDir: '.'
           };
 
           export default config;
           EOF
 
+      - name: Remove old Android project
+        run: |
+          rm -rf android
+
       - name: Create Android project
         run: |
           npx cap add android
 
-      - name: Copy Study Zone into Android
+      - name: Sync Study Zone
         run: |
           npx cap sync android
 
-      - name: Build Debug APK
+      - name: Build APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Rename APK
+      - name: Prepare APK
         run: |
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/Study-Zone.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             release/Study-Zone.apk
 
-      - name: Upload Study Zone APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Study-Zone-APK
