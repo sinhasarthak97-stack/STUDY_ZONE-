@@ -12,53 +12,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find package.json
+      - name: Find project directory
         shell: bash
         run: |
           echo "Searching for package.json..."
 
-          PACKAGE_JSON=$(find . -type f -name "package.json" \
+          PACKAGE_FILE=$(find "$GITHUB_WORKSPACE" \
+            -type f \
+            -name "package.json" \
             -not -path "*/node_modules/*" \
-            -print -quit)
+            | head -n 1)
 
-          if [ -z "$PACKAGE_JSON" ]; then
-            echo "❌ ERROR: package.json was not found."
-            echo ""
-            echo "Your repository must contain a Node/Capacitor project with package.json."
-            echo ""
-            echo "Files in repository:"
-            find . -maxdepth 3 -type f | head -100
+          if [ -z "$PACKAGE_FILE" ]; then
+            echo "ERROR: package.json was not found."
+            echo "Repository structure:"
+            find "$GITHUB_WORKSPACE" -maxdepth 3 -type f | sort | head -200
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
+          PROJECT_DIR=$(dirname "$PACKAGE_FILE")
 
-          # Remove ./ from the beginning
-          PROJECT_DIR="${PROJECT_DIR#./}"
+          echo "package.json found at:"
+          echo "$PACKAGE_FILE"
 
-          if [ "$PROJECT_DIR" = "." ]; then
-            PROJECT_DIR="$GITHUB_WORKSPACE"
-          else
-            PROJECT_DIR="$GITHUB_WORKSPACE/$PROJECT_DIR"
-          fi
-
-          echo "Found package.json at: $PACKAGE_JSON"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
 
       - name: Install dependencies
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -66,54 +60,45 @@ jobs:
             npm install
           fi
 
-      - name: Build web app
+      - name: Build web application
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
-          if npm run | grep -q "build"; then
-            npm run build
-          else
-            echo "No build script found. Skipping npm run build."
-          fi
+          npm run build
 
-      - name: Check Capacitor
+      - name: Verify Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
-          if [ ! -f capacitor.config.ts ] && \
-             [ ! -f capacitor.config.js ] && \
-             [ ! -f capacitor.config.json ]; then
-            echo "❌ Capacitor configuration was not found."
-            echo "Your project needs capacitor.config.ts/js/json."
-            exit 1
-          fi
+          npx cap --version
 
       - name: Add Android platform
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
-          if [ ! -d android ]; then
-            npx cap add android
-          else
+          if [ -d android ]; then
             echo "Android platform already exists."
+          else
+            npx cap add android
           fi
 
       - name: Sync Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
           npx cap sync android
 
-      - name: Build APK
+      - name: Update Android dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          npx cap update android || true
+
+      - name: Build Debug APK
         working-directory: ${{ env.PROJECT_DIR }}/android
-        shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew clean
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: STUDY_ZONE-apk
+          name: STUDY_ZONE-APK
           path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
