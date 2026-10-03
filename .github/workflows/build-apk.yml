@@ -1,104 +1,70 @@
-name: Build APK
+name: Build Study Zone APK
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Study Zone
         uses: actions/checkout@v4
-
-      - name: Find project directory
-        shell: bash
-        run: |
-          echo "Searching for package.json..."
-
-          PACKAGE_FILE=$(find "$GITHUB_WORKSPACE" \
-            -type f \
-            -name "package.json" \
-            -not -path "*/node_modules/*" \
-            | head -n 1)
-
-          if [ -z "$PACKAGE_FILE" ]; then
-            echo "ERROR: package.json was not found."
-            echo "Repository structure:"
-            find "$GITHUB_WORKSPACE" -maxdepth 3 -type f | sort | head -200
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$PACKAGE_FILE")
-
-          echo "package.json found at:"
-          echo "$PACKAGE_FILE"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle
 
-      - name: Install dependencies
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Install Capacitor
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Build web application
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Create Capacitor configuration
         run: |
-          npm run build
+          cat > capacitor.config.ts <<'EOF'
+          import type { CapacitorConfig } from '@capacitor/cli';
 
-      - name: Verify Capacitor
-        working-directory: ${{ env.PROJECT_DIR }}
+          const config: CapacitorConfig = {
+            appId: 'com.studyzone.app',
+            appName: 'Study Zone',
+            webDir: '.',
+            bundledWebRuntime: false
+          };
+
+          export default config;
+          EOF
+
+      - name: Create Android project
         run: |
-          npx cap --version
+          npx cap add android
 
-      - name: Add Android platform
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          if [ -d android ]; then
-            echo "Android platform already exists."
-          else
-            npx cap add android
-          fi
-
-      - name: Sync Capacitor
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Copy Study Zone into Android
         run: |
           npx cap sync android
 
-      - name: Update Android dependencies
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          npx cap update android || true
-
       - name: Build Debug APK
-        working-directory: ${{ env.PROJECT_DIR }}/android
+        working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew clean
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/Study-Zone.apk
+
+      - name: Upload Study Zone APK
         uses: actions/upload-artifact@v4
         with:
-          name: STUDY_ZONE-APK
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: Study-Zone-APK
+          path: release/Study-Zone.apk
