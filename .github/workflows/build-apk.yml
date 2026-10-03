@@ -1,32 +1,119 @@
 name: Build APK
+
 on:
   push:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Find project folder
-        run: echo "PROJECT_DIR=$(dirname $(find . -name package.json -not -path '*/node_modules/*' | head -1))" >> $GITHUB_ENV
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find package.json
+        shell: bash
+        run: |
+          echo "Searching for package.json..."
+
+          PACKAGE_JSON=$(find . -type f -name "package.json" \
+            -not -path "*/node_modules/*" \
+            -print -quit)
+
+          if [ -z "$PACKAGE_JSON" ]; then
+            echo "❌ ERROR: package.json was not found."
+            echo ""
+            echo "Your repository must contain a Node/Capacitor project with package.json."
+            echo ""
+            echo "Files in repository:"
+            find . -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
+
+          # Remove ./ from the beginning
+          PROJECT_DIR="${PROJECT_DIR#./}"
+
+          if [ "$PROJECT_DIR" = "." ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
+          else
+            PROJECT_DIR="$GITHUB_WORKSPACE/$PROJECT_DIR"
+          fi
+
+          echo "Found package.json at: $PACKAGE_JSON"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/setup-java@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-      - run: npm install
+
+      - name: Install dependencies
         working-directory: ${{ env.PROJECT_DIR }}
-      - run: npm run vendor
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build web app
         working-directory: ${{ env.PROJECT_DIR }}
-      - run: npx cap add android
+        shell: bash
+        run: |
+          if npm run | grep -q "build"; then
+            npm run build
+          else
+            echo "No build script found. Skipping npm run build."
+          fi
+
+      - name: Check Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
-      - run: npx cap sync android
+        shell: bash
+        run: |
+          if [ ! -f capacitor.config.ts ] && \
+             [ ! -f capacitor.config.js ] && \
+             [ ! -f capacitor.config.json ]; then
+            echo "❌ Capacitor configuration was not found."
+            echo "Your project needs capacitor.config.ts/js/json."
+            exit 1
+          fi
+
+      - name: Add Android platform
         working-directory: ${{ env.PROJECT_DIR }}
-      - run: chmod +x gradlew && ./gradlew assembleDebug
+        shell: bash
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          else
+            echo "Android platform already exists."
+          fi
+
+      - name: Sync Capacitor
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          npx cap sync android
+
+      - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}/android
-      - uses: actions/upload-artifact@v4
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: STUDY_ZONE-apk
           path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
