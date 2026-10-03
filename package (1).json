@@ -1,0 +1,10 @@
+{
+  "name": "study-zone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Study Zone - personal study tracker, AI tutor, practice and Science 3D Lab PWA",
+  "scripts": {
+    "build": "mkdir -p dist && cp index.html sw.js manifest.webmanifest dist/ && for f in icon-192.png icon-512.png; do if [ -f \"$f\" ]; then cp \"$f\" dist/; fi; done",
+    "start": "python3 -m http.server 8080"
+  }
+}
