@@ -25,17 +25,38 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Create package.json if missing
+      - name: Prepare web files
         run: |
-          if [ ! -f package.json ]; then
-            cat > package.json <<'EOF'
-            {
-              "name": "study-zone",
-              "version": "1.0.0",
-              "private": true
-            }
-            EOF
+          rm -rf www
+          mkdir -p www
+
+          cp index.html www/
+
+          if [ -f sw.js ]; then
+            cp sw.js www/
           fi
+
+          if [ -f manifest.webmanifest ]; then
+            cp manifest.webmanifest www/
+          fi
+
+          if [ -f icon-192.png ]; then
+            cp icon-192.png www/
+          fi
+
+          if [ -f icon-512.png ]; then
+            cp icon-512.png www/
+          fi
+
+      - name: Create package.json
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "name": "study-zone",
+            "version": "1.0.0",
+            "private": true
+          }
+          EOF
 
       - name: Install Capacitor
         run: |
@@ -43,24 +64,17 @@ jobs:
 
       - name: Create Capacitor config
         run: |
-          cat > capacitor.config.ts <<'EOF'
-          import type { CapacitorConfig } from '@capacitor/cli';
-
-          const config: CapacitorConfig = {
-            appId: 'com.studyzone.app',
-            appName: 'Study Zone',
-            webDir: '.'
-          };
-
-          export default config;
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.studyzone.app",
+            "appName": "Study Zone",
+            "webDir": "www"
+          }
           EOF
-
-      - name: Remove old Android project
-        run: |
-          rm -rf android
 
       - name: Create Android project
         run: |
+          rm -rf android
           npx cap add android
 
       - name: Sync Study Zone
