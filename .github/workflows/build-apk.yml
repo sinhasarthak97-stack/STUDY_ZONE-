@@ -9,11 +9,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       # --------------------------------------------------
-      # Find the actual project containing package.json
+      # Checkout
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # --------------------------------------------------
+      # Find project containing package.json
       # --------------------------------------------------
       - name: Find project directory
         shell: bash
@@ -49,13 +53,14 @@ jobs:
 
       # --------------------------------------------------
       # Java
+      # IMPORTANT:
+      # No Gradle cache here because Android is created later.
       # --------------------------------------------------
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
-          cache: gradle
+          java-version: '17'
 
       # --------------------------------------------------
       # Install dependencies
@@ -80,7 +85,7 @@ jobs:
           npm run build
 
       # --------------------------------------------------
-      # Add Android
+      # Add Android platform
       # --------------------------------------------------
       - name: Add Android platform
         working-directory: ${{ env.PROJECT_DIR }}
@@ -102,7 +107,7 @@ jobs:
           npx cap sync android
 
       # --------------------------------------------------
-      # Install Pillow for automatic icon generation
+      # Install Pillow
       # --------------------------------------------------
       - name: Install image tools
         run: |
@@ -110,12 +115,13 @@ jobs:
           python3 -m pip install pillow
 
       # --------------------------------------------------
-      # Automatically apply Study Zone logo
+      # Apply Study Zone launcher icon
       # --------------------------------------------------
       - name: Apply Study Zone launcher icon
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
+
           if [ ! -f "$GITHUB_WORKSPACE/assets/study-zone-icon.png" ]; then
             echo "ERROR: assets/study-zone-icon.png was not found."
             exit 1
@@ -142,6 +148,7 @@ jobs:
           }
 
           for folder, size in sizes.items():
+
               directory = res / folder
               directory.mkdir(parents=True, exist_ok=True)
 
@@ -162,16 +169,17 @@ jobs:
                   optimize=True
               )
 
-          # Remove Android's generated adaptive-icon XML so
-          # the PNG launcher icon is used directly.
           adaptive = res / "mipmap-anydpi-v26"
 
           if adaptive.exists():
+
               for filename in [
                   "ic_launcher.xml",
                   "ic_launcher_round.xml"
               ]:
+
                   file = adaptive / filename
+
                   if file.exists():
                       file.unlink()
 
@@ -179,12 +187,13 @@ jobs:
           PY
 
       # --------------------------------------------------
-      # Verify launcher icon
+      # Verify icon
       # --------------------------------------------------
       - name: Verify launcher icon
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
+
           test -f android/app/src/main/res/mipmap-mdpi/ic_launcher.png
           test -f android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           test -f android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
@@ -200,8 +209,11 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}/android
         shell: bash
         run: |
+
           chmod +x gradlew
+
           ./gradlew clean
+
           ./gradlew assembleDebug --stacktrace
 
       # --------------------------------------------------
