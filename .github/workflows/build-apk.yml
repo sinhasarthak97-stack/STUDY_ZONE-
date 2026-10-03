@@ -10,11 +10,9 @@ jobs:
 
     steps:
 
-      # 1. Get project
       - name: Checkout project
         uses: actions/checkout@v4
 
-      # 2. Find the folder containing package.json
       - name: Find project folder
         shell: bash
         run: |
@@ -24,29 +22,28 @@ jobs:
             -print -quit)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: package.json was not found."
+            echo "ERROR: package.json not found."
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$PROJECT_DIR")
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project folder: $PROJECT_DIR"
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
 
-      # 3. Node
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 4. Java
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      # 5. Install existing dependencies
       - name: Install npm dependencies
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -56,59 +53,105 @@ jobs:
             npm install
           fi
 
-      # 6. Install Capacitor
       - name: Install Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           npm install @capacitor/core @capacitor/android
           npm install --save-dev @capacitor/cli
 
-      # 7. Check Capacitor
+      - name: Create Capacitor configuration
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.studyzone.app",
+            "appName": "Study Zone",
+            "webDir": "dist"
+          }
+          EOF
+
+          echo "Capacitor configuration:"
+          cat capacitor.config.json
+
       - name: Check Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           npx cap --version
 
-      # 8. Build web app
-      - name: Build web app
+      - name: Build web application
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           if npm run | grep -q "build"; then
             npm run build
           else
             echo "No build script found."
-            echo "Continuing because the project may already contain built web files."
           fi
 
-      # 9. Create Android project
+      - name: Detect web directory
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          if [ -d "dist" ]; then
+            WEB_DIR="dist"
+          elif [ -d "build" ]; then
+            WEB_DIR="build"
+          elif [ -d "www" ]; then
+            WEB_DIR="www"
+          else
+            echo "ERROR: No dist, build, or www directory found."
+            exit 1
+          fi
+
+          echo "Using web directory: $WEB_DIR"
+
+          python3 - <<PY
+          import json
+
+          path = "capacitor.config.json"
+
+          with open(path) as f:
+              config = json.load(f)
+
+          config["webDir"] = "$WEB_DIR"
+
+          with open(path, "w") as f:
+              json.dump(config, f, indent=2)
+
+          print(json.dumps(config, indent=2))
+          PY
+
       - name: Add Android platform
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
           if [ ! -d "android" ]; then
-            echo "Android platform does not exist."
             echo "Creating Android platform..."
             npx cap add android
           else
             echo "Android platform already exists."
           fi
 
-      # 10. Sync Capacitor
-      - name: Sync Android
+      - name: Sync Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           npx cap sync android
 
-      # 11. Build APK
-      - name: Build Debug APK
+      - name: Verify Android project
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          test -f android/gradlew
+          test -f android/app/build.gradle || test -f android/app/build.gradle.kts
+          echo "Android project successfully created."
+
+      - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}/android
         run: |
           chmod +x gradlew
           ./gradlew clean
           ./gradlew assembleDebug --stacktrace
 
-      # 12. Upload APK
-      - name: Upload Study Zone APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: STUDY_ZONE-APK
