@@ -10,64 +10,45 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------
-      # Checkout
-      # --------------------------------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      # 1. Get project
+      - name: Checkout project
+        uses: actions/checkout@v4
 
-      # --------------------------------------------------
-      # Find project containing package.json
-      # --------------------------------------------------
-      - name: Find project directory
+      # 2. Find the folder containing package.json
+      - name: Find project folder
         shell: bash
         run: |
-          PACKAGE_FILE=$(find "$GITHUB_WORKSPACE" \
-            -type f \
-            -name "package.json" \
-            -not -path "*/node_modules/*" \
-            | head -n 1)
+          PROJECT_DIR=$(find . -name package.json \
+            -not -path '*/node_modules/*' \
+            -not -path './android/*' \
+            -print -quit)
 
-          if [ -z "$PACKAGE_FILE" ]; then
+          if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: package.json was not found."
-            echo ""
-            echo "Repository files:"
-            find "$GITHUB_WORKSPACE" -maxdepth 3 -type f | sort | head -200
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PACKAGE_FILE")
-
-          echo "Found package.json:"
-          echo "$PACKAGE_FILE"
-
+          PROJECT_DIR=$(dirname "$PROJECT_DIR")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # --------------------------------------------------
-      # Node
-      # --------------------------------------------------
-      - name: Setup Node
+          echo "Project folder: $PROJECT_DIR"
+
+      # 3. Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      # --------------------------------------------------
-      # Java
-      # IMPORTANT:
-      # No Gradle cache here because Android is created later.
-      # --------------------------------------------------
+      # 4. Java
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      # --------------------------------------------------
-      # Install dependencies
-      # --------------------------------------------------
-      - name: Install dependencies
+      # 5. Install existing dependencies
+      - name: Install npm dependencies
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -75,150 +56,58 @@ jobs:
             npm install
           fi
 
-      # --------------------------------------------------
-      # Build web application
-      # --------------------------------------------------
-      - name: Build web application
+      # 6. Install Capacitor
+      - name: Install Capacitor
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
-          npm run build
+          npm install @capacitor/core @capacitor/android
+          npm install --save-dev @capacitor/cli
 
-      # --------------------------------------------------
-      # Add Android platform
-      # --------------------------------------------------
+      # 7. Check Capacitor
+      - name: Check Capacitor
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          npx cap --version
+
+      # 8. Build web app
+      - name: Build web app
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          if npm run | grep -q "build"; then
+            npm run build
+          else
+            echo "No build script found."
+            echo "Continuing because the project may already contain built web files."
+          fi
+
+      # 9. Create Android project
       - name: Add Android platform
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
-          if [ ! -d android ]; then
+          if [ ! -d "android" ]; then
+            echo "Android platform does not exist."
+            echo "Creating Android platform..."
             npx cap add android
           else
             echo "Android platform already exists."
           fi
 
-      # --------------------------------------------------
-      # Sync Capacitor
-      # --------------------------------------------------
-      - name: Sync Capacitor
+      # 10. Sync Capacitor
+      - name: Sync Android
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
           npx cap sync android
 
-      # --------------------------------------------------
-      # Install Pillow
-      # --------------------------------------------------
-      - name: Install image tools
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install pillow
-
-      # --------------------------------------------------
-      # Apply Study Zone launcher icon
-      # --------------------------------------------------
-      - name: Apply Study Zone launcher icon
-        working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
-        run: |
-
-          if [ ! -f "$GITHUB_WORKSPACE/assets/study-zone-icon.png" ]; then
-            echo "ERROR: assets/study-zone-icon.png was not found."
-            exit 1
-          fi
-
-          python3 - <<'PY'
-          from PIL import Image
-          from pathlib import Path
-
-          source = Path(
-              "${{ github.workspace }}/assets/study-zone-icon.png"
-          )
-
-          res = Path("android/app/src/main/res")
-
-          image = Image.open(source).convert("RGBA")
-
-          sizes = {
-              "mipmap-mdpi": 48,
-              "mipmap-hdpi": 72,
-              "mipmap-xhdpi": 96,
-              "mipmap-xxhdpi": 144,
-              "mipmap-xxxhdpi": 192,
-          }
-
-          for folder, size in sizes.items():
-
-              directory = res / folder
-              directory.mkdir(parents=True, exist_ok=True)
-
-              icon = image.resize(
-                  (size, size),
-                  Image.Resampling.LANCZOS
-              )
-
-              icon.save(
-                  directory / "ic_launcher.png",
-                  "PNG",
-                  optimize=True
-              )
-
-              icon.save(
-                  directory / "ic_launcher_round.png",
-                  "PNG",
-                  optimize=True
-              )
-
-          adaptive = res / "mipmap-anydpi-v26"
-
-          if adaptive.exists():
-
-              for filename in [
-                  "ic_launcher.xml",
-                  "ic_launcher_round.xml"
-              ]:
-
-                  file = adaptive / filename
-
-                  if file.exists():
-                      file.unlink()
-
-          print("Study Zone launcher icon applied successfully.")
-          PY
-
-      # --------------------------------------------------
-      # Verify icon
-      # --------------------------------------------------
-      - name: Verify launcher icon
-        working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
-        run: |
-
-          test -f android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-          test -f android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          test -f android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          test -f android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-
-          echo "Launcher icon verification successful."
-
-      # --------------------------------------------------
-      # Build APK
-      # --------------------------------------------------
+      # 11. Build APK
       - name: Build Debug APK
         working-directory: ${{ env.PROJECT_DIR }}/android
-        shell: bash
         run: |
-
           chmod +x gradlew
-
           ./gradlew clean
-
           ./gradlew assembleDebug --stacktrace
 
-      # --------------------------------------------------
-      # Upload APK
-      # --------------------------------------------------
+      # 12. Upload APK
       - name: Upload Study Zone APK
         uses: actions/upload-artifact@v4
         with:
