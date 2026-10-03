@@ -12,15 +12,16 @@ jobs:
 
     steps:
       - name: Checkout Study Zone
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -48,7 +49,7 @@ jobs:
             cp icon-512.png www/
           fi
 
-      - name: Create package.json
+      - name: Create clean package.json
         run: |
           cat > package.json <<'EOF'
           {
@@ -60,7 +61,10 @@ jobs:
 
       - name: Install Capacitor
         run: |
-          npm install @capacitor/core@8 @capacitor/cli@8 @capacitor/android@8
+          npm install --no-audit --no-fund \
+            @capacitor/core@8 \
+            @capacitor/cli@8 \
+            @capacitor/android@8
 
       - name: Create Capacitor config
         run: |
@@ -85,16 +89,17 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Prepare APK
         run: |
           mkdir -p release
           cp android/app/build/outputs/apk/debug/app-debug.apk \
-             release/Study-Zone.apk
+            release/Study-Zone.apk
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Study-Zone-APK
           path: release/Study-Zone.apk
+          if-no-files-found: error
