@@ -1,7 +1,7 @@
 {
  "name": "Study Zone",
  "short_name": "Study Zone",
- "description": "Study tracker, focus timer, notes, AI tutor and Science 3D Lab",
+ "description": "Study tracker, practice, tools and Science 3D Lab",
  "start_url": ".",
  "scope": ".",
  "display": "standalone",
