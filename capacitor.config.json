@@ -1,0 +1,15 @@
+{
+  "appId": "com.studyzone.app",
+  "appName": "Study Zone",
+  "webDir": "www",
+  "backgroundColor": "#060b14",
+  "android": {
+    "backgroundColor": "#060b14",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css"
+    }
+  }
+}

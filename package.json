@@ -1,10 +1,24 @@
 {
   "name": "study-zone",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Study Zone - personal study tracker, AI tutor, practice and Science 3D Lab PWA",
+  "description": "Study Zone: study tracker, practice, formulas, flashcards and AI Guru as a web app and Android APK",
   "scripts": {
-    "build": "mkdir -p dist && cp index.html sw.js manifest.webmanifest dist/ && for f in icon-192.png icon-512.png; do if [ -f \"$f\" ]; then cp \"$f\" dist/; fi; done",
-    "start": "python3 -m http.server 8080"
+    "check": "node build.mjs check",
+    "build:web": "node build.mjs web",
+    "test": "node build.mjs smoke"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "playwright": "^1.50.0",
+    "sharp": "^0.34.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
