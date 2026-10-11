@@ -1,0 +1,11 @@
+#exam Example Board
+#subject Maths
+#year 2000
+#chapter Format example
+Q: This is only a format example. Delete it or keep the underscore in the file name. What is 1 + 1?
+A) 1
+B) 2
+C) 3
+D) 4
+Ans: B
+Exp: 1 + 1 = 2.

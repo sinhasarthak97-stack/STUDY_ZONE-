@@ -1,5 +1,5 @@
 // Study Zone build toolkit. One file, no setup. Usage: node build.mjs <command>
-//   check  - validate files, JSON and the app's JavaScript
+//   check  - validate files, JSON, the app's JavaScript and any question packs in pyq/
 //   web    - copy the web app into www/ and stamp the service-worker cache name
 //   assets - make icon and splash source images in assets/ (needs sharp)
 //   patch  - set versionCode / versionName in the generated Android project
@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 import http from 'node:http';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -26,6 +27,49 @@ function pngSize(file) {
 
 function inlineScripts(html) {
   return [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+}
+
+// ---------------------------------------------------------------- PYQ packs
+// The app's own parser (between the PYQ-CORE markers in index.html) is run here,
+// so a pack that passes this check is read the same way inside the app.
+function loadParser() {
+  const html = rd('index.html');
+  const a = html.indexOf('/*PYQ-CORE-START*/'), b = html.indexOf('/*PYQ-CORE-END*/');
+  if (a < 0 || b < 0) fail('PYQ core markers not found in index.html');
+  const ctx = vm.createContext({});
+  vm.runInContext(html.slice(a, b) + '\nthis.pqParse = pqParse;', ctx);
+  return ctx.pqParse;
+}
+
+function listPacks() {
+  const dir = path.join(ROOT, 'pyq');
+  if (!fs.existsSync(dir)) return [];
+  const parse = loadParser();
+  return fs.readdirSync(dir)
+    .filter((f) => /\.(json|csv|tsv|txt)$/i.test(f) && !f.startsWith('_') && f !== 'index.json')
+    .sort()
+    .map((file) => {
+      const text = fs.readFileSync(path.join(dir, file), 'utf8');
+      const r = parse(text, file);
+      const v = crypto.createHash('sha1').update(text).digest('hex').slice(0, 8);
+      return { file, v, n: r.items.length, bad: r.bad };
+    });
+}
+
+function checkPacks() {
+  const parse = loadParser();
+  const t = parse('#exam T\n#subject Maths\nQ: one\nA) a\nB) b\nAns: B\nQ: two\nAns: 7', 'x.txt');
+  const c = parse('exam,subject,question,A,B,C,D,answer\nT,Maths,"q, 1",1,2,3,4,C', 'x.csv');
+  const j = parse('{"exam":"T","questions":[{"q":"z","options":["a","b"],"answer":"A"}]}', 'x.json');
+  if (t.items.length !== 2 || c.items.length !== 1 || j.items.length !== 1) fail('PYQ parser self-test failed');
+  ok('PYQ parser self-test passed (text, CSV and JSON)');
+  const packs = listPacks();
+  for (const p of packs) {
+    if (!p.n) fail(`pyq/${p.file}: no usable questions. ${p.bad.slice(0, 3).map((b) => '#' + b.n + ' ' + b.err).join('; ')}`);
+    ok(`pyq/${p.file}: ${p.n} questions` + (p.bad.length ? ` (${p.bad.length} skipped: ${p.bad.slice(0, 3).map((b) => '#' + b.n + ' ' + b.err).join('; ')})` : ''));
+  }
+  if (!packs.length) console.log('note no question packs in pyq/ (questions can still be added inside the app)');
+  return packs;
 }
 
 // ---------------------------------------------------------------- check
@@ -61,6 +105,8 @@ function check() {
   if (!/const C='[^']*'/.test(rd('sw.js'))) fail("sw.js must contain const C='cache-name'");
   ok('sw.js parses and has a cache name');
 
+  checkPacks();
+
   const m = html.match(/const BANK=(\{[\s\S]*?\})\s*(?:\n|;)/);
   if (m) {
     try {
@@ -91,6 +137,11 @@ function web() {
     }
     fs.writeFileSync(path.join(out, f), data);
   }
+  const packs = listPacks().filter((p) => p.n > 0);
+  fs.mkdirSync(path.join(out, 'pyq'), { recursive: true });
+  for (const p of packs) fs.copyFileSync(path.join(ROOT, 'pyq', p.file), path.join(out, 'pyq', p.file));
+  fs.writeFileSync(path.join(out, 'pyq', 'index.json'), JSON.stringify({ packs: packs.map(({ file, v }) => ({ file, v })) }));
+  ok(`pyq packs bundled: ${packs.length} file(s), ${packs.reduce((a, p) => a + p.n, 0)} questions`);
   fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({
     version: pkg.version, build, commit: (process.env.GITHUB_SHA || '').slice(0, 7), date: new Date().toISOString(),
   }, null, 2));
@@ -187,9 +238,19 @@ async function smoke() {
     need(/98/.test(ans), 'AI Guru solves molar mass offline (98 g/mol)');
     await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, '4-ai-guru.png') });
 
+    need(await page.evaluate(() => [...document.querySelectorAll('nav button')].some((b) => /PYQs/.test(b.textContent))), 'PYQs tab is in the navigation');
+    const sample = '#exam CBSE Class 10\n#subject Maths\n#year 2023\n#chapter Probability\nQ: Smoke test question. The probability of a sure event is\nA) 0\nB) 1\nC) 2\nD) 3\nAns: B';
+    const imp = await page.evaluate(async (t) => { const r = pqParse(t, 'x.txt'); const x = await pqImportItems(r.items); return [r.items.length, r.bad.length, x.added]; }, sample);
+    need(imp[0] === 1 && imp[1] === 0 && imp[2] === 1, 'PYQ import works (text format, saved to the device)');
+    const mixed = await page.evaluate(() => { S.exam = 'Class 10'; S.pqw = 100; let n = 0; for (let i = 0; i < 5; i++) genLocal('Probability', 'Maths', 5, 'MCQ', 'Mixed').forEach((q) => { if (q.pid) n++; }); S.pqw = 50; return n; });
+    need(mixed > 0, 'PYQs are mixed into normal practice for the matching chapter');
+    await page.evaluate(() => go('pyq')); await page.waitForTimeout(900);
+    need(await page.evaluate(() => /1\s*question/.test(document.querySelector('#main').innerText)), 'PYQs screen lists the imported question');
+    await page.screenshot({ path: path.join(shots, '5-pyqs.png') });
+
     await page.evaluate(() => go('res')); await page.waitForTimeout(250);
     need(await page.evaluate(() => document.querySelectorAll('details a').length >= 15), 'resources page lists the study links');
-    await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, '5-resources.png') });
+    await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, '6-resources.png') });
   } catch (e) { errors.push('exception: ' + e.message); }
   await browser.close(); server.close();
   if (errors.length) { console.error(errors.join('\n')); process.exit(1); }

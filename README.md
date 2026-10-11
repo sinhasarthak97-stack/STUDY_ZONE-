@@ -2,14 +2,26 @@
 
 A study tracker, practice generator, flashcards, 600+ formula library, AI Guru and Science 3D Lab. It runs as a website (GitHub Pages) and builds into an Android APK automatically with GitHub Actions.
 
-## What is new in 2.0
-- **Question bank: 287 questions** (was 28) across Biology, Physics, Chemistry, Maths, Polity, History, Geography, Economy, English and Hindi. Each has an explanation, and practice picks questions that match the chapter you choose.
-- **Flashcards** (Resources > Study Tools): spaced repetition over every question and formula. Cards you miss return sooner.
-- **Better resources:** grouped, collapsible links to NCERT, DIKSHA, NIOS, NTA, SWAYAM, NPTEL, Khan Academy, PhET, GeoGebra, Desmos, PubChem, PIB and more.
-- **Automatic APK builds** with tests, caching, versioning, a stable signing key and a download page.
+## What is new
+**2.1**
+- **PYQs tab** for previous year questions: import files or paste text, browse by exam, subject, year and type, practise, take a timed test, and track what you got right. Multiple-choice, numerical and written questions are supported.
+- **PYQs in practice:** matching questions are mixed into normal practice and random practice (you choose how often: off, 25%, 50% or 75%).
+- **Question packs in the APK:** put files in a `pyq/` folder and the build bundles them, so they work offline.
+- **Modern design:** a new look with a floating glass navigation bar, gradient accents and softer cards, in light and dark mode.
+- **CBSE Class 10 board blueprint** (Resources): marks by unit for Maths, Science, Social Science and English.
+
+**2.0**
+- 287 built-in practice questions, Flashcards with spaced repetition, grouped study links, and automatic APK builds.
+
+## Adding your PYQs
+The app does not ship with previous year papers. Add the ones you have, from official sources such as cbseacademic.nic.in, in either of these ways.
+
+**Inside the app (easiest):** open the **PYQs** tab, choose files or paste text, and tap **Import text**. Questions are saved on that phone and work offline. Raw text copied from a PDF can be cleaned up with **Structure with AI**, but check the answers against the marking scheme.
+
+**Built into the APK:** create files in a `pyq/` folder of your repository (**Add file > Create new file**, name it `pyq/cbse-10-2023.txt`) and paste the questions. The next build bundles them and every install gets them. See `pyq/_README.txt` for the format. Multiple-choice questions need an answer; written questions can carry a model answer.
 
 ## Set up (works from a phone browser)
-1. **Upload the files.** In your repository tap **Add file > Upload files** and add every file from this zip that is *not* inside `.github` (index.html, sw.js, manifest.webmanifest, the five PNG files, package.json, capacitor.config.json, build.mjs, debug.keystore, .gitignore, README.md). Commit.
+1. **Upload the files.** In your repository tap **Add file > Upload files** and add every file from this zip that is *not* inside `.github` (index.html, sw.js, manifest.webmanifest, the five PNG files, package.json, capacitor.config.json, build.mjs, debug.keystore, .gitignore, README.md). Question packs go in a `pyq/` folder (see below). Commit.
 2. **Add the workflow.** Open your existing workflow file under `.github/workflows/` (or **Add file > Create new file** and type `.github/workflows/android.yml`). Replace everything with the contents of `android.yml`. Commit. If you have two workflow files, delete the old one so they do not both run.
 3. **Allow releases.** Repository **Settings > Actions > General > Workflow permissions** > choose **Read and write permissions** > Save.
 4. **Run it.** Push a commit, or open **Actions > Study Zone Android > Run workflow**.

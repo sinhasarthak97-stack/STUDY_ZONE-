@@ -1,6 +1,6 @@
 {
   "name": "study-zone",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Study Zone: study tracker, practice, formulas, flashcards and AI Guru as a web app and Android APK",
   "scripts": {
