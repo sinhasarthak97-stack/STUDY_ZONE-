@@ -3,6 +3,7 @@
 //   web    - copy the web app into www/ and stamp the service-worker cache name
 //   assets - make icon and splash source images in assets/ (needs sharp)
 //   patch  - set versionCode / versionName in the generated Android project
+//   native - add the voice-input plugin to the generated Android project (--remove undoes it)
 //   smoke  - open the built app in headless Chromium and test it (needs playwright)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -137,6 +138,12 @@ function web() {
     }
     fs.writeFileSync(path.join(out, f), data);
   }
+  const pdfPkg = path.join(ROOT, 'node_modules', 'pdfjs-dist', 'package.json');
+  if (fs.existsSync(pdfPkg) && /^3\./.test(JSON.parse(fs.readFileSync(pdfPkg, 'utf8')).version)) {
+    fs.mkdirSync(path.join(out, 'lib'), { recursive: true });
+    for (const f of ['pdf.min.js', 'pdf.worker.min.js']) fs.copyFileSync(path.join(ROOT, 'node_modules', 'pdfjs-dist', 'build', f), path.join(out, 'lib', f));
+    ok('pdf.js bundled (the PDF reader works offline)');
+  } else console.log('note pdf.js 3.x is not installed here; the PDF reader will use the internet');
   const packs = listPacks().filter((p) => p.n > 0);
   fs.mkdirSync(path.join(out, 'pyq'), { recursive: true });
   for (const p of packs) fs.copyFileSync(path.join(ROOT, 'pyq', p.file), path.join(out, 'pyq', p.file));
@@ -185,6 +192,80 @@ function patch() {
   if (b === a) fail('versionName line not found in ' + path.basename(file));
   fs.writeFileSync(file, b);
   ok(`${path.basename(file)}${kts ? ' (kts)' : ''}: versionCode ${code}, versionName ${name}`);
+}
+
+// ---------------------------------------------------------------- native
+const VOICE_JAVA = `package com.studyzone.app;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.speech.RecognizerIntent;
+import androidx.activity.result.ActivityResult;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import java.util.ArrayList;
+
+@CapacitorPlugin(name = "Voice")
+public class VoicePlugin extends Plugin {
+
+  @PluginMethod
+  public void listen(PluginCall call) {
+    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, call.getString("lang", "en-IN"));
+    intent.putExtra(RecognizerIntent.EXTRA_PROMPT, call.getString("prompt", "Speak now"));
+    intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+    try {
+      startActivityForResult(call, intent, "listenResult");
+    } catch (Exception e) {
+      call.reject("Voice input is not available on this device");
+    }
+  }
+
+  @ActivityCallback
+  private void listenResult(PluginCall call, ActivityResult result) {
+    if (call == null) return;
+    String text = "";
+    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+      ArrayList<String> r = result.getData().getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+      if (r != null && !r.isEmpty()) text = r.get(0);
+    }
+    JSObject out = new JSObject();
+    out.put("text", text);
+    call.resolve(out);
+  }
+}
+`;
+const MAIN_JAVA = `package com.studyzone.app;
+
+import android.os.Bundle;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+  @Override
+  public void onCreate(Bundle savedInstanceState) {
+    registerPlugin(VoicePlugin.class);
+    super.onCreate(savedInstanceState);
+  }
+}
+`;
+function native() {
+  const dir = path.join(ROOT, 'android', 'app', 'src', 'main', 'java', 'com', 'studyzone', 'app');
+  const main = path.join(dir, 'MainActivity.java'), plugin = path.join(dir, 'VoicePlugin.java'), orig = main + '.orig';
+  if (process.argv.includes('--remove')) {
+    if (fs.existsSync(orig)) { fs.copyFileSync(orig, main); fs.rmSync(orig); }
+    fs.rmSync(plugin, { force: true });
+    return ok('voice plugin removed');
+  }
+  if (!fs.existsSync(main)) return console.log('note MainActivity.java not found; voice input will use the browser engine only');
+  if (!fs.existsSync(orig)) fs.copyFileSync(main, orig);
+  fs.writeFileSync(plugin, VOICE_JAVA);
+  fs.writeFileSync(main, MAIN_JAVA);
+  ok('voice plugin added to the Android project');
 }
 
 // ---------------------------------------------------------------- smoke
@@ -248,6 +329,20 @@ async function smoke() {
     need(await page.evaluate(() => /1\s*question/.test(document.querySelector('#main').innerText)), 'PYQs screen lists the imported question');
     await page.screenshot({ path: path.join(shots, '5-pyqs.png') });
 
+    const feat = await page.evaluate(() => ({
+      fns: ['plan', 'mock', 'trev', 'vsay', 'askImg', 'remSave', 'pickImg'].every((f) => typeof window[f] === 'function'),
+      lb: /Leaderboard|tlb\(/.test(document.documentElement.innerHTML),
+      rows: planRows().length,
+      mock: mockBuild('Maths', 'quick').qs.length,
+    }));
+    need(feat.fns, 'plan, mock tests, review hub, voice, photo and reminder code is present');
+    need(!feat.lb, 'leaderboard is removed');
+    need(feat.rows > 5 && feat.mock >= 10, `smart plan ranks ${feat.rows} chapters; a quick mock builds ${feat.mock} questions`);
+    await page.evaluate(() => go('sett')); await page.waitForTimeout(500);
+    need(await page.evaluate(() => document.querySelectorAll('#ap option').length === 2 && !document.getElementById('ak')), 'Settings has no API key options');
+    await page.evaluate(() => go('mock')); await page.waitForTimeout(900);
+    await page.screenshot({ path: path.join(shots, '5b-mock.png') });
+
     await page.evaluate(() => go('res')); await page.waitForTimeout(250);
     need(await page.evaluate(() => document.querySelectorAll('details a').length >= 15), 'resources page lists the study links');
     await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, '6-resources.png') });
@@ -258,6 +353,6 @@ async function smoke() {
 }
 
 const cmd = process.argv[2];
-const cmds = { check, web, assets, patch, smoke };
+const cmds = { check, web, assets, patch, native, smoke };
 if (!cmds[cmd]) fail('usage: node build.mjs <' + Object.keys(cmds).join('|') + '>');
 await cmds[cmd]();
