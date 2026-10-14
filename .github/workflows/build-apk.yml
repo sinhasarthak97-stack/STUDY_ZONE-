@@ -108,6 +108,10 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Add reminders plugin (optional)
+        continue-on-error: true
+        run: npm install --no-audit --no-fund @capacitor/local-notifications@^8.0.0
+
       - name: Make sure Android SDK 36 is installed
         continue-on-error: true
         run: |
@@ -135,6 +139,10 @@ jobs:
       - name: Create the Android project
         run: npx cap add android
 
+      - name: Add voice input (optional)
+        continue-on-error: true
+        run: node build.mjs native
+
       - name: Make icons and splash screens
         continue-on-error: true
         run: |
@@ -157,10 +165,21 @@ jobs:
           cp debug.keystore ~/.android/debug.keystore
 
       - name: Build debug APK
+        id: gradle1
+        continue-on-error: true
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --console=plain --warning-mode summary
+
+      - name: Retry without optional features
+        if: steps.gradle1.outcome == 'failure'
+        run: |
+          echo "::warning::Voice input and reminders were left out because the build with them failed."
+          node build.mjs native --remove
+          npm uninstall --no-audit --no-fund @capacitor/local-notifications || true
+          npx cap sync android
+          cd android && ./gradlew clean assembleDebug --console=plain --warning-mode summary
 
       - name: Collect and verify the debug APK
         env:
