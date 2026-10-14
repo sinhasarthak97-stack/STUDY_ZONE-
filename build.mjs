@@ -330,7 +330,7 @@ async function smoke() {
     await page.screenshot({ path: path.join(shots, '5-pyqs.png') });
 
     const feat = await page.evaluate(() => ({
-      fns: ['plan', 'mock', 'trev', 'vsay', 'askImg', 'remSave', 'pickImg'].every((f) => typeof window[f] === 'function'),
+      fns: ['plan', 'mock', 'trev', 'vsay', 'askImg', 'remSave', 'pickImg', 'voiceAsk', 'voiceRoute', 'usearch', 'speak', 'pqPhoto'].every((f) => typeof window[f] === 'function'),
       lb: /Leaderboard|tlb\(/.test(document.documentElement.innerHTML),
       rows: planRows().length,
       mock: mockBuild('Maths', 'quick').qs.length,
@@ -338,6 +338,9 @@ async function smoke() {
     need(feat.fns, 'plan, mock tests, review hub, voice, photo and reminder code is present');
     need(!feat.lb, 'leaderboard is removed');
     need(feat.rows > 5 && feat.mock >= 10, `smart plan ranks ${feat.rows} chapters; a quick mock builds ${feat.mock} questions`);
+    const vr = await page.evaluate(() => { const o = {}; ['open flashcards', 'practice maths', 'formula for escape velocity', 'photosynthesis'].forEach((t) => { go('home'); o[t] = voiceRoute(t); }); const d = usData('escape velocity'); o.hits = d.f.length + d.q.length; return o; });
+    need(vr['open flashcards'] === 'nav' && vr['practice maths'] === 'practice' && vr['formula for escape velocity'] === 'formula' && vr.photosynthesis === 'search', 'voice commands are understood (navigation, practice, formulas, search)');
+    need(vr.hits > 0, 'universal search finds formulas and questions');
     await page.evaluate(() => go('sett')); await page.waitForTimeout(500);
     need(await page.evaluate(() => document.querySelectorAll('#ap option').length === 2 && !document.getElementById('ak')), 'Settings has no API key options');
     await page.evaluate(() => go('mock')); await page.waitForTimeout(900);

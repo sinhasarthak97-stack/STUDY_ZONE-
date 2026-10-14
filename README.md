@@ -3,6 +3,13 @@
 A study tracker, practice generator, flashcards, 600+ formula library, AI Guru and Science 3D Lab. It runs as a website (GitHub Pages) and builds into an Android APK automatically with GitHub Actions.
 
 ## What is new
+**2.3**
+- **Voice assistant:** tap the 🎤 on Home. A listening panel shows what you say as you speak. Say "open flashcards", "start mock test", "practice maths", "physics quiz on light", "formula for escape velocity", "PYQs 2023 probability", "note buy a geometry box", or ask any question. Commands work in English and Hindi (for example "फ्लैशकार्ड खोलो", "गणित का अभ्यास"). Switch the language in the panel or in Settings > Voice.
+- **Search or ask:** one search box on Home for formulas, built-in questions, PYQs, chapters and notes, with an "Ask AI Guru" button. Anything you say that is not a command goes here.
+- **Read aloud (🔊 Listen)** on AI Guru answers, flashcards and PYQ answers, in English or Hindi.
+- **Dictate** written answers in mock tests.
+- **Add PYQs from a photo** of a paper (needs internet and the free AI; check the answers).
+
 **2.2**
 - **Today's plan** on Home and a **Smart study plan**: chapters ranked by marks (CBSE Class 10 blueprint) and your weak spots, with minutes for each and a weekly layout.
 - **Mock tests** (Quick, Half, Full): timed, multiple-choice marked for you, written questions from your PYQs marked by you against the model answer, with a score by section and chapter. Wrong answers go to your mistake notebook.
